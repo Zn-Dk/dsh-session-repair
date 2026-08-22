@@ -2,6 +2,12 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.4.0] - 2026-08-22
+
+### 新增
+- GUI 面板增加「备份列表」：展示 pre-repair 备份清单，并支持逐份与当前工件对比（sha256/bytes/maxSeq/severity）。
+- GUI 面板增加「导出报告」：一键下载诊断报告 JSON。
+
 ## [0.3.0] - 2026-08-22
 
 ### 新增
