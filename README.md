@@ -4,29 +4,24 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 
 ## 安装
 
-开发或构建前必须先在插件目录执行：
+### 从 npm 安装（推荐）
 
-    pnpm install
+    dsh plugin --profile web add dsh-session-repair
 
-### 开发阶段：使用 link 实时观察源码
+安装后重启 `dsh web`，再刷新 http://127.0.0.1:3080。
 
-当前版本尚未对外发布，开发阶段按 dsh-session-archive 的模式使用目录 link：
+### 从 GitHub 安装
+
+    dsh plugin --profile web add github:Zn-Dk/dsh-session-repair
+
+### 开发阶段：link 本地源码
 
     cd /root/proj/dsh-proj/dsh-session-repair
     pnpm install
-    pnpm dsh plugin --profile web add link:/root/proj/dsh-proj/dsh-session-repair
+    pnpm build
+    dsh plugin --profile web add link:/root/proj/dsh-proj/dsh-session-repair
 
 修改源码后重启现有 dsh web；不要启动替代服务器。若同时运行 deepseek-harness 的 dev:web watcher，Client bundle 可通过现有 HMR 接收更新。
-
-### 发布阶段：再用 tarball 验收
-
-对外发布前才执行：
-
-    pnpm test
-    pnpm pack
-    dsh plugin --profile web add ./dsh-session-repair-0.1.0.tgz
-
-发布包安装后重启现有 dsh web，再刷新 http://127.0.0.1:3080。
 
 ## 状态分级
 
@@ -43,6 +38,8 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 
 打开任意会话，在 Chat header 点击「会话体检」。当报告为 repairable 且至少有一条确定性修复计划时，面板会显示「备份并修复」按钮，并列出全部待修 seq 链。点击后先确认目标 seq 和 pre-repair backup，再一次性执行修复并重新校验；歧义、live、文件变化或其他 blocked 状态不会显示可写修复按钮。
 
+面板还提供「备份列表」（查看/对比历史 pre-repair 备份）、「复制报告」、「导出报告」（下载诊断 JSON）。
+
 健康会话中也可以输入 /dsh-session-repair，或调用 dsh_session_repair 并传入旧 sessionId 来诊断 history unavailable 会话。
 
 ## 安全边界
@@ -53,7 +50,13 @@ Host 先读取 raw storage，再决定是否调用引擎展示接口。Client �
 
 ## 当前实现状态
 
-当前仓库已包含 raw zstd/JSONL 诊断、tool-call ID 检查、确定性 repair plan、checkpoint/pre-repair backup 写入、RPC、Agent tool、header 报告面板和随包 Skill。MVP 未完成端点会返回明确的 not-implemented，不会伪装成功。
+当前仓库已包含 raw zstd/JSONL 诊断、tool-call ID 检查、确定性 repair plan、checkpoint/pre-repair backup 写入、backup 列表/对比、报告导出、RPC、Agent tool、header 报告面板和随包 Skill。全部端点为已实现或明确返回 not-implemented，不会伪装成功。
+
+## 发布与收录
+
+- npm：`dsh-session-repair`（当前 `0.4.1`）
+- GitHub：https://github.com/Zn-Dk/dsh-session-repair
+- 收录：提交 PR 至 https://github.com/awesome-dsh-plugin/awesome-dsh-plugin（`data/plugins/Zn-Dk__dsh-session-repair.yml`，category: `session`）
 
 ## 第三方边界
 

@@ -2,6 +2,11 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.4.1] - 2026-08-22
+
+### 文档
+- README 补充 npm/GitHub 安装方式、备份列表与报告导出说明，以及 awesome-dsh-plugin 收录指引。
+
 ## [0.4.0] - 2026-08-22
 
 ### 新增
