@@ -2,6 +2,14 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.4.2] - 2026-08-22
+
+### 修复
+- `listBackups` / `compareBackup` 误用 `'pre-repair'` 作为 projectKey，导致备份清单永远为空、GUI「备份列表」无反应；改为从当前会话工件路径推导 projectKey。
+
+### 变更
+- 体检面板缩短（inset 收紧、内边距减小、报告区最大高度下调）；面板与确认弹窗增加 backdrop-filter 磨砂玻璃效果。
+
 ## [0.4.1] - 2026-08-22
 
 ### 文档

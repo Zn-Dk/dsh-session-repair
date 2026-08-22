@@ -87,7 +87,7 @@ async function compareWithBackup(ctx: Ctx, sessionId: string, backupId: string) 
   if (!validId(backupId) || !backupId.endsWith('.manifest.json')) return err('bad-request', 'backupId must be a manifest file name')
   const current = await inspectSession(ctx, sessionId)
   if (!current.ok) return current
-  const dir = backupDirectory(root, 'pre-repair', sessionId)
+  const dir = backupDirectory(root, projectKeyOf(current.value.path), sessionId)
   let manifestText: string
   try { manifestText = await readFile(join(dir, backupId), 'utf8') } catch (e) { return err('artifact-missing', 'backup manifest is not available') }
   let manifest: BackupManifestLike
@@ -124,7 +124,9 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
   if (endpoint === 'inspect') return inspectSession(ctx, sessionId)
   if (endpoint === 'listBackups') {
     if (!validId(sessionId)) return badRequest('sessionId must be a safe non-empty string')
-    const dir = backupDirectory(root, 'pre-repair', sessionId)
+    const inspected = await inspectSession(ctx, sessionId)
+    if (!inspected.ok) return inspected
+    const dir = backupDirectory(root, projectKeyOf(inspected.value.path), sessionId)
     try {
       const names = await readdir(dir)
       return ok({ root, items: names.filter(name => name.endsWith('.manifest.json')).slice(-100) })

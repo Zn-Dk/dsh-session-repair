@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-repair",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "DSH Web 会话诊断、可信备份与安全修复插件。",
   "type": "module",
   "main": "lib/index.js",
