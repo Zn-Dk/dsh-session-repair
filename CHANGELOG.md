@@ -2,6 +2,11 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.5.3] - 2026-08-22
+
+### 文档
+- SKILL.md 补充 `dsh_session_repair` 工具用法：模型调用、只读诊断、修复仍需 header 面板。
+
 ## [0.5.2] - 2026-08-22
 
 ### 文档

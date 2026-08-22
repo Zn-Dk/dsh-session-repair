@@ -8,6 +8,15 @@ when-to-use: Use when history is unavailable, session persistence validation fai
 
 Use the Host tool dsh_session_repair as the source of facts. Do not reimplement zstd parsing or edit ~/.dsh directly.
 
+## Using the tool
+
+The plugin registers a model-invoked tool `dsh_session_repair` (not user-triggerable; no slash command or button). Invoke it by asking the agent:
+
+- `dsh_session_repair({ sessionId: "session-xxxx" })` — diagnose a specific (possibly history-unavailable) session from a healthy conversation.
+- `dsh_session_repair()` — diagnose the current session.
+
+It returns a read-only structured report (severity / checks / repairPlans / maxSeq / eventCount). It never repairs; repair still requires the header "会话体检" panel.
+
 ## Workflow
 
 1. If the current conversation is healthy, diagnose it by default. If it is history unavailable, run this Skill from a healthy conversation and pass the old sessionId explicitly.
