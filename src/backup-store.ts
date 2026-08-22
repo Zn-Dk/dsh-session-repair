@@ -1,4 +1,4 @@
-import { mkdir, open, readFile, rename, stat } from 'node:fs/promises'
+import { mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash, randomUUID } from 'node:crypto'
 
@@ -53,6 +53,27 @@ export function manifestFor({ sessionId, projectKey, cwd, sourcePath, bytes, max
 }
 export function backupDirectory(root: string, projectKey: string, sessionId: string): string {
   return join(root, 'backups', projectKey, sessionId)
+}
+/**
+ * Remove single-slot safety backups (pre-repair / pre-restore) for one session,
+ * keeping trusted checkpoints. Returns the names of removed manifest files.
+ * Auto-cleanup is destructive, so it only targets the slot kinds that repair
+ * manages; checkpoint files are never touched here.
+ */
+export async function clearSafetySlots(dir: string): Promise<string[]> {
+  const removed: string[] = []
+  let names: string[]
+  try { names = await readdir(dir) } catch { return removed }
+  for (const name of names) {
+    if (name.startsWith('pre-repair-') || name.startsWith('pre-restore-')) {
+      const manifestPath = join(dir, name)
+      const artifactPath = manifestPath.slice(0, -'.manifest.json'.length)
+      try { await rm(artifactPath) } catch {}
+      try { await rm(manifestPath) } catch {}
+      removed.push(name)
+    }
+  }
+  return removed
 }
 export async function stableCopy(sourcePath: string, targetDir: string, meta: BackupMeta): Promise<SavedBackup> {
   const before = await stat(sourcePath)

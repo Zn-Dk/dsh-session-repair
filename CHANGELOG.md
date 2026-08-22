@@ -2,6 +2,17 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.5.0] - 2026-08-22
+
+### 新增
+- 备份改为单槽模型：每次 repair 只保留一份 pre-repair 回滚点（覆盖式），不再累积多份。
+- `restoreBackup` 端点：repairable/blocked 会话可一键恢复到最近一次修复前，全套安全边界（live 拒绝 + pre-restore 备份 + 原子替换 + 复验 + 审计），恢复成功后自动清空 safety 槽。
+- `clearBackups` 端点：手动清空 safety 备份。
+
+### 修复
+- `listBackups`/`compareBackup` 误用 projectKey 的 bug 已修；inspect 在 healthy/warning 且非 live 时自动清理 safety 备份并记录 `cleanedBackups`。
+- 备份相关按钮互斥：有备份时只显示「恢复上次修复前」+「清空备份」，无备份时显示「备份并修复」，避免三按钮同现。
+
 ## [0.4.2] - 2026-08-22
 
 ### 修复

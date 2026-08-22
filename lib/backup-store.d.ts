@@ -46,5 +46,12 @@ export declare function manifestFor({ sessionId, projectKey, cwd, sourcePath, by
     trusted?: boolean;
 }): BackupManifest;
 export declare function backupDirectory(root: string, projectKey: string, sessionId: string): string;
+/**
+ * Remove single-slot safety backups (pre-repair / pre-restore) for one session,
+ * keeping trusted checkpoints. Returns the names of removed manifest files.
+ * Auto-cleanup is destructive, so it only targets the slot kinds that repair
+ * manages; checkpoint files are never touched here.
+ */
+export declare function clearSafetySlots(dir: string): Promise<string[]>;
 export declare function stableCopy(sourcePath: string, targetDir: string, meta: BackupMeta): Promise<SavedBackup>;
 //# sourceMappingURL=backup-store.d.ts.map

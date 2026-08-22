@@ -6,7 +6,7 @@ import { CHANNEL, badRequest, err, ok, toError, validId, type Result } from './p
 import { readArtifact } from './raw-storage.js'
 import { validateEvents, type ValidationReport } from './doctor-core.js'
 import { applyEmptyToolChains, atomicWrite, findEmptyToolChains, repairJsonlFrames, type RepairPlan } from './repair.js'
-import { backupDirectory, stableCopy } from './backup-store.js'
+import { backupDirectory, clearSafetySlots, stableCopy } from './backup-store.js'
 
 export const name = 'dsh-session-repair'
 // Optional services are resolved through ctx.get so a missing capability becomes a reportable
@@ -68,8 +68,15 @@ async function inspectSession(ctx: Ctx, sessionId: string): Promise<Result<Valid
   try { artifact = await readArtifact(path) } catch (e) { return err('zstd-invalid', e instanceof Error ? e.message : String(e)) }
   const live = Boolean((ctx.get('sessions') as { get?: (id: string) => unknown } | undefined)?.get?.(sessionId) ?? (ctx.get('agents') as { get?: (id: string) => unknown } | undefined)?.get?.(sessionId))
   const report = validateEvents(artifact.events as never[], sessionId, artifact, { live })
-  const merged = report as ValidationReport & { sessionId: string; path: string; repairPlans: RepairPlan[]; generatedAt: string; live: boolean }
-  merged.sessionId = sessionId; merged.path = path; merged.repairPlans = findEmptyToolChains(artifact.events as never[]); merged.generatedAt = new Date().toISOString(); merged.live = live
+  const merged = report as ValidationReport & { sessionId: string; path: string; repairPlans: RepairPlan[]; generatedAt: string; live: boolean; cleanedBackups: string[] }
+  merged.sessionId = sessionId; merged.path = path; merged.repairPlans = findEmptyToolChains(artifact.events as never[]); merged.generatedAt = new Date().toISOString(); merged.live = live; merged.cleanedBackups = []
+  // Auto-clean single-slot safety backups only when the artifact is settled and
+  // healthy/warning (i.e. the repair already succeeded and the session opened
+  // normally). Live sessions keep their rollback point.
+  if (!live && (report.severity === 'healthy' || report.severity === 'warning')) {
+    const dir = backupDirectory(root, projectKeyOf(path), sessionId)
+    merged.cleanedBackups = await clearSafetySlots(dir)
+  }
   return ok(merged)
 }
 
@@ -135,6 +142,14 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
       throw error
     }
   }
+  if (endpoint === 'clearBackups') {
+    if (!validId(sessionId)) return badRequest('sessionId must be a safe non-empty string')
+    const inspected = await inspectSession(ctx, sessionId)
+    if (!inspected.ok) return inspected
+    const dir = backupDirectory(root, projectKeyOf(inspected.value.path), sessionId)
+    const removed = await clearSafetySlots(dir)
+    return ok({ removed, count: removed.length })
+  }
   if (endpoint === 'createCheckpoint') {
     const inspected = await inspectSession(ctx, sessionId)
     if (!inspected.ok) return inspected
@@ -172,7 +187,9 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
     if (session || agent) return err('live-session', 'live or attached sessions are read-only')
     if ((payload.expectedFingerprint as { sha256?: string } | undefined)?.sha256 !== batch.fingerprint.sha256) return err('artifact-changed', 'client fingerprint does not match repair plan')
     const projectKey = projectKeyOf(batch.path)
-    const pre = await stableCopy(batch.path, backupDirectory(root, projectKey, batch.sessionId), { sessionId: batch.sessionId, projectKey, cwd: null, maxSeq: Math.max(0, ...(current.events as SessionEventsLike[]).map(event => event.seq ?? 0)), trigger: 'pre-repair', validation: { kind: 'pre-repair' }, kind: 'pre-repair', trusted: false })
+    const backupDir = backupDirectory(root, projectKey, batch.sessionId)
+    await clearSafetySlots(backupDir) // single-slot: replace the previous pre-repair rollback point
+    const pre = await stableCopy(batch.path, backupDir, { sessionId: batch.sessionId, projectKey, cwd: null, maxSeq: Math.max(0, ...(current.events as SessionEventsLike[]).map(event => event.seq ?? 0)), trigger: 'pre-repair', validation: { kind: 'pre-repair' }, kind: 'pre-repair', trusted: false })
     const fixed = applyEmptyToolChains(current.events as never[], batch.plans)
     const changedSeqs = batch.plans.flatMap(plan => plan.seqs)
     const bytes = repairJsonlFrames(current.bytes, fixed.events, changedSeqs)
@@ -182,6 +199,40 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
     const auditPath = await writeAudit({ sessionId: batch.sessionId, seqs: changedSeqs, repairIds: batch.plans.map(plan => plan.repairId), batchId: batch.batchId, before: batch.fingerprint, after: repaired.fingerprint, preRepair: pre.id, result: afterReport.severity })
     pendingRepairs.delete(batch.batchId)
     return ok({ repaired: afterReport.severity === 'healthy' || afterReport.severity === 'warning', sessionId: batch.sessionId, preRepair: pre, auditPath, fingerprint: repaired.fingerprint, report: afterReport })
+  }
+  if (endpoint === 'restoreBackup') {
+    if (!validId(sessionId)) return badRequest('sessionId must be a safe non-empty string')
+    const backupId = payload.backupId as string
+    if (!validId(backupId) || !backupId.endsWith('.manifest.json')) return badRequest('backupId must be a manifest file name')
+    const inspected = await inspectSession(ctx, sessionId)
+    if (!inspected.ok) return inspected
+    // Restore is only offered for a broken artifact; healthy/warning has nothing to roll back.
+    if (inspected.value.severity !== 'repairable' && inspected.value.severity !== 'blocked') return err('restore-blocked', 'restore is only available for repairable or blocked sessions')
+    const live = Boolean((ctx.get('sessions') as { get?: (id: string) => unknown } | undefined)?.get?.(sessionId) ?? (ctx.get('agents') as { get?: (id: string) => unknown } | undefined)?.get?.(sessionId))
+    if (live) return err('live-session', 'live or attached sessions are read-only')
+    const projectKey = projectKeyOf(inspected.value.path)
+    const dir = backupDirectory(root, projectKey, sessionId)
+    let manifestText: string
+    try { manifestText = await readFile(join(dir, backupId), 'utf8') } catch { return err('artifact-missing', 'backup manifest is not available') }
+    let manifest: { sha256: string; bytes: number; maxSeq: number }
+    try { manifest = JSON.parse(manifestText) } catch { return err('json-invalid', 'backup manifest is not valid JSON') }
+    const artifactPath = join(dir, backupId.slice(0, -'.manifest.json'.length))
+    let backupBytes: Buffer
+    try { backupBytes = await readFile(artifactPath) } catch { return err('artifact-missing', 'backup artifact is not available') }
+    const current = await readArtifact(inspected.value.path)
+    if (!current.stable) return err('artifact-changed', 'artifact changed while being read')
+    // Safety net: save the current broken state before overwriting it.
+    await clearSafetySlots(dir)
+    const pre = await stableCopy(inspected.value.path, dir, { sessionId, projectKey, cwd: null, maxSeq: current.events.length ? Math.max(0, ...(current.events as SessionEventsLike[]).map(event => event.seq ?? 0)) : 0, trigger: 'pre-restore', validation: { kind: 'pre-restore' }, kind: 'pre-restore', trusted: false })
+    await atomicWrite(inspected.value.path, backupBytes)
+    const restored = await readArtifact(inspected.value.path)
+    const afterReport = validateEvents(restored.events as never[], sessionId, restored)
+    const auditPath = await writeAudit({ sessionId, backupId, restore: true, before: current.fingerprint, after: restored.fingerprint, preRestore: pre.id, result: afterReport.severity })
+    // A successful restore resolves the rollback decision: clear every safety slot
+    // (including the pre-restore we just wrote) so the session starts clean and the
+    // UI only offers a fresh repair — never another restore into the broken state.
+    await clearSafetySlots(dir)
+    return ok({ restored: afterReport.severity === 'healthy' || afterReport.severity === 'warning', sessionId, preRestore: pre, auditPath, fingerprint: restored.fingerprint, report: afterReport })
   }
   if (endpoint === 'exportReport') {
     const inspected = await inspectSession(ctx, sessionId)
