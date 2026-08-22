@@ -47,9 +47,19 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 - 「清空备份」：手动清空 safety 备份。
 - 「备份并修复」：仅当报告为 `repairable` 且存在确定性修复计划时显示。
 
-### Agent 工具
+### Agent 工具（模型调用）
 
-- `dsh_session_repair`：可选传 `sessionId` 诊断指定会话（缺省时诊断当前会话）。history unavailable 会话可从健康会话中传入旧 sessionId 诊断。
+插件注册了一个**模型可调用工具** `dsh_session_repair`，它不是用户手动触发，而是由 agent 判断并调用：
+
+- 参数：`sessionId`（可选；缺省时诊断当前会话）
+- 返回：结构化诊断报告（severity / checks / repairPlans / maxSeq / eventCount 等）
+
+典型用法：
+
+1. 在**健康会话**里对 agent 说：「诊断 session-xxxx 这个 history unavailable 会话」，agent 会调用 `dsh_session_repair` 并传入旧 sessionId。
+2. 在当前会话里对 agent 说：「帮我体检一下当前会话」，agent 调用时不传 sessionId，诊断当前会话。
+
+注意：该工具只做**只读诊断**，不会执行修复。修复仍需在 header 的「会话体检」面板里点按钮完成。
 
 ## 安全边界
 
