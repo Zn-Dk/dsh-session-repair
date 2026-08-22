@@ -1,0 +1,4 @@
+# dsh-session-repair bundle patch.
+- insert:
+    - id: dsh-session-repair
+      name: dsh-session-repair
