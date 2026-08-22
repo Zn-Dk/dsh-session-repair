@@ -2,6 +2,12 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.2.0] - 2026-08-22
+
+### 变更
+- Host 半区从 JavaScript 源码迁移为 TypeScript（`src/*.ts` 经 tsc 编译到 `lib/*.js`），Client bundle 保持手写 JS（`window.__ModuleLoader__` 运行时注入格式）。
+- 新增 `tsconfig.json` 与 `build`/`prepack`/`test` 脚本；测试迁移为 `.ts` 并由 `tsx` 运行。
+
 ## [0.1.0] - 2026-08-22
 
 ### 新增
