@@ -43,15 +43,13 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 - 「刷新诊断」：重新读取当前会话工件并更新报告。
 - 「复制报告」：把诊断 JSON 复制到剪贴板。
 - 「导出报告」：下载诊断报告 JSON 文件。
-- 「备份列表」：列出当前会话的 pre-repair 备份；点击某份备份旁的「对比」可查看它与当前工件的指纹、maxSeq、事件数与 severity 差异。
+- 「恢复上次修复前」：仅当会话为 repairable/blocked 且存在 pre-repair 备份时显示，一键回滚到最近一次修复前的状态。
+- 「清空备份」：手动清空 safety 备份。
 - 「备份并修复」：仅当报告为 `repairable` 且存在确定性修复计划时显示。
 
-健康会话中也可以输入 /dsh-session-repair，或调用 dsh_session_repair 并传入旧 sessionId 来诊断 history unavailable 会话。
+### Agent 工具
 
-### 命令行与 Agent 工具
-
-- 斜杠命令：`/dsh-session-repair`
-- Agent 工具：`dsh_session_repair`（可选传 `sessionId`；缺省时诊断当前会话）
+- `dsh_session_repair`：可选传 `sessionId` 诊断指定会话（缺省时诊断当前会话）。history unavailable 会话可从健康会话中传入旧 sessionId 诊断。
 
 ## 安全边界
 

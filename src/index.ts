@@ -60,7 +60,7 @@ async function locate(ctx: Ctx, sessionId: string): Promise<string | undefined> 
   if (!header) return undefined
   const location = p.locate(header); return location?.path
 }
-async function inspectSession(ctx: Ctx, sessionId: string): Promise<Result<ValidationReport & { sessionId: string; path: string; repairPlans: RepairPlan[]; generatedAt: string; live: boolean }>> {
+async function inspectSession(ctx: Ctx, sessionId: string): Promise<Result<ValidationReport & { sessionId: string; path: string; repairPlans: RepairPlan[]; generatedAt: string; live: boolean; cleanedBackups: string[] }>> {
   if (!validId(sessionId)) return err('bad-request', 'sessionId must be a safe non-empty string')
   const path = await locate(ctx, sessionId)
   if (!path) return err('artifact-missing', 'session artifact is not available')
