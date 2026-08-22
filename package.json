@@ -44,7 +44,9 @@
     "@deepseek-ai/dsh-skill": ">=0.1.0-rc.7"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs",
+    "build": "tsc -p tsconfig.json",
+    "prepack": "pnpm build",
+    "test": "tsx --test test/*.test.ts",
     "pack:check": "pnpm pack --dry-run"
   },
   "repository": {
@@ -53,5 +55,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
   }
 }
