@@ -38,9 +38,20 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 
 打开任意会话，在 Chat header 点击「会话体检」。当报告为 repairable 且至少有一条确定性修复计划时，面板会显示「备份并修复」按钮，并列出全部待修 seq 链。点击后先确认目标 seq 和 pre-repair backup，再一次性执行修复并重新校验；歧义、live、文件变化或其他 blocked 状态不会显示可写修复按钮。
 
-面板还提供「备份列表」（查看/对比历史 pre-repair 备份）、「复制报告」、「导出报告」（下载诊断 JSON）。
+面板按钮说明：
+
+- 「刷新诊断」：重新读取当前会话工件并更新报告。
+- 「复制报告」：把诊断 JSON 复制到剪贴板。
+- 「导出报告」：下载诊断报告 JSON 文件。
+- 「备份列表」：列出当前会话的 pre-repair 备份；点击某份备份旁的「对比」可查看它与当前工件的指纹、maxSeq、事件数与 severity 差异。
+- 「备份并修复」：仅当报告为 `repairable` 且存在确定性修复计划时显示。
 
 健康会话中也可以输入 /dsh-session-repair，或调用 dsh_session_repair 并传入旧 sessionId 来诊断 history unavailable 会话。
+
+### 命令行与 Agent 工具
+
+- 斜杠命令：`/dsh-session-repair`
+- Agent 工具：`dsh_session_repair`（可选传 `sessionId`；缺省时诊断当前会话）
 
 ## 安全边界
 
@@ -58,6 +69,6 @@ Host 先读取 raw storage，再决定是否调用引擎展示接口。Client �
 - GitHub：https://github.com/Zn-Dk/dsh-session-repair
 - 收录：提交 PR 至 https://github.com/awesome-dsh-plugin/awesome-dsh-plugin（`data/plugins/Zn-Dk__dsh-session-repair.yml`，category: `session`）
 
-## 第三方边界
+## Skill
 
-本插件不依赖、不修改、不融合 dsh-session-archive 或 dsh-session-manager。Skill 与插件同名但属于不同注册表；Skill 随包发布在 skills/dsh-session-repair/SKILL.md，由 Host runtime 注册，不单独发布、不使用 submodule、不默认软链接。
+随包 Skill 发布在 `skills/dsh-session-repair/SKILL.md`，由 Host runtime 注册；与插件同名但属于不同注册表，不单独发布、不使用 submodule、不默认软链接。
