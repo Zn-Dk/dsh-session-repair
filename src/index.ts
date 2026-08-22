@@ -72,6 +72,53 @@ async function inspectSession(ctx: Ctx, sessionId: string): Promise<Result<Valid
   merged.sessionId = sessionId; merged.path = path; merged.repairPlans = findEmptyToolChains(artifact.events as never[]); merged.generatedAt = new Date().toISOString(); merged.live = live
   return ok(merged)
 }
+
+interface BackupManifestLike {
+  sha256: string
+  bytes: number
+  maxSeq: number
+  capturedAt: string
+  trigger: string
+  trust: string
+  sourcePath: string
+}
+async function compareWithBackup(ctx: Ctx, sessionId: string, backupId: string) {
+  if (!validId(sessionId)) return err('bad-request', 'sessionId must be a safe non-empty string')
+  if (!validId(backupId) || !backupId.endsWith('.manifest.json')) return err('bad-request', 'backupId must be a manifest file name')
+  const current = await inspectSession(ctx, sessionId)
+  if (!current.ok) return current
+  const dir = backupDirectory(root, 'pre-repair', sessionId)
+  let manifestText: string
+  try { manifestText = await readFile(join(dir, backupId), 'utf8') } catch (e) { return err('artifact-missing', 'backup manifest is not available') }
+  let manifest: BackupManifestLike
+  try { manifest = JSON.parse(manifestText) } catch { return err('json-invalid', 'backup manifest is not valid JSON') }
+  const currentArtifact = current.value.artifact as { sha256: string; bytes: number }
+  const currentSeqs = (current.value as unknown as { checks: Array<{ seqs: number[] }> }).checks
+  const newEvents = current.value.maxSeq > manifest.maxSeq ? current.value.maxSeq - manifest.maxSeq : 0
+  return ok({
+    sessionId,
+    backupId,
+    current: {
+      sha256: currentArtifact.sha256,
+      bytes: currentArtifact.bytes,
+      maxSeq: current.value.maxSeq,
+      eventCount: current.value.eventCount,
+      severity: current.value.severity,
+    },
+    backup: {
+      sha256: manifest.sha256,
+      bytes: manifest.bytes,
+      maxSeq: manifest.maxSeq,
+      capturedAt: manifest.capturedAt,
+      trigger: manifest.trigger,
+      trust: manifest.trust,
+    },
+    sameContent: currentArtifact.sha256 === manifest.sha256 && currentArtifact.bytes === manifest.bytes,
+    advanced: current.value.maxSeq > manifest.maxSeq,
+    newEvents,
+  })
+}
+
 export function createHandler(ctx: Ctx) { return async (endpoint: string, payload: Record<string, unknown> = {}): Promise<Result<unknown>> => { try {
   const sessionId = payload.sessionId as string
   if (endpoint === 'inspect') return inspectSession(ctx, sessionId)
@@ -94,7 +141,7 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
     const saved = await stableCopy(inspected.value.path, backupDirectory(root, projectKey, sessionId), { sessionId, projectKey, cwd: null, maxSeq: inspected.value.maxSeq, trigger: 'explicit-inspect', validation: { severity: inspected.value.severity, checks: inspected.value.checks.length }, kind: 'checkpoint' })
     return ok({ checkpoint: saved })
   }
-  if (endpoint === 'compareBackup') return err('not-implemented', 'backup comparison is not wired yet')
+  if (endpoint === 'compareBackup') return compareWithBackup(ctx, sessionId, payload.backupId as string)
   if (endpoint === 'prepareRepair') {
     pruneRepairs()
     const inspected = await inspectSession(ctx, sessionId)

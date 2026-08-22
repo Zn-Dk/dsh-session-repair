@@ -2,6 +2,11 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.3.0] - 2026-08-22
+
+### 新增
+- 实现 `compareBackup` 端点：对比当前会话工件与指定 pre-repair 备份的指纹（sha256/bytes）、maxSeq、事件数与 severity，并报告是否内容一致、是否有新事件（超过备份 maxSeq）。
+
 ## [0.2.0] - 2026-08-22
 
 ### 变更
