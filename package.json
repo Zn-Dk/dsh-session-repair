@@ -60,5 +60,47 @@
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.0.0"
+  },
+  "dshWorkshop": {
+    "schema": "omdsh-workshop-package/v1",
+    "type": "plugin",
+    "integration": {
+      "protocol": "harness-profile",
+      "artifact": "lib/index.js"
+    },
+    "install": {
+      "mode": "transactional",
+      "adapter": "harness-profile",
+      "failurePolicy": "generation-rollback",
+      "touchesCurrentBeforeActivation": false
+    },
+    "lifecycle": {
+      "activation": "restart-host",
+      "dispose": "supported"
+    },
+    "permissions": [
+      "fs:read",
+      "fs:write",
+      "session:read",
+      "session:write",
+      "network:none"
+    ],
+    "compatibility": {
+      "dshVersions": [
+        "0.1.0-rc.7"
+      ]
+    },
+    "capability": {
+      "id": "dsh_session_repair",
+      "kind": "tool",
+      "invocation": "dsh_session_repair with a valid sessionId",
+      "expected": "returns a structured diagnostic report"
+    },
+    "evidence": {
+      "install": null,
+      "failureIsolation": null,
+      "hotReload": null,
+      "remove": null
+    }
   }
 }
