@@ -4,7 +4,11 @@
 
 DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插件。
 
-<img src="assets/session-health-check.png" width="640" alt="会话体检" />
+<p align="center">
+  <img src="assets/session-health-check.png" width="290" alt="会话体检" />
+  <img src="assets/session-health-check-repairable.png" width="290" alt="检测到可修复问题：备份并修复" />
+  <img src="assets/session-health-check-repaired.png" width="290" alt="修复完成" />
+</p>
 
 ## 安装
 
