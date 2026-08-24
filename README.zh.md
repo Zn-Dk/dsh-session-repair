@@ -4,7 +4,7 @@
 
 DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插件。
 
-DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插件。
+<img src="assets/session-health-check.png" width="640" alt="会话体检" />
 
 ## 安装
 
@@ -37,6 +37,20 @@ DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插�
 | `warning` | 已结束（非 live）的历史存在未闭合的 turn/step 结构，或有其他潜在问题。可读、不提供写入修复。 |
 | `repairable` | 存在确定性可修复问题（如空 tool-call ID 链），可提交修复计划。 |
 | `blocked` | 会话无法正常展示，且存在无法自动修复的硬冲突（如 ID 冲突、zstd 损坏、会话不匹配）。 |
+
+## 为什么需要这个插件
+
+当 DeepSeek 网关在 tool-call 增量帧里偶发把 `id`/`name` 发成空字符串（上游 [discussion #4365](https://github.com/deepseek-ai/deepseek-harness/discussions/4365) 跟踪的 identity-loss 家族），持久化历史会被「毒化」——之后每次加载都抛 `message must have tool source`，会话永久打不开。
+
+dsh-session-repair 就在这个打不开的会话顶部**原位一键修复**——不用复制 sessionId、不用 agent 参与、不用手工切帧解压 zstd：
+
+- 一键：在坏会话 header 点「会话体检」→「备份并修复」。
+- 覆盖三种身份丢失形态：字段缺失、`null`、`""`。
+- 一次性修复整条链（`assistant/message`、`tool/call`、`tool/result`）。
+- 修复前强制 pre-repair backup，支持一键回滚，并保留审计记录。
+
+
+上游已验证根因，并把我们的 closeBlock 兜底采纳为引擎侧修复蓝图的新增层（discussion #4365）。本插件是读取路径的恢复侧补全：它修复已经毒化的历史，引擎 patch 则阻止新的毒化写入。
 
 ## 使用
 

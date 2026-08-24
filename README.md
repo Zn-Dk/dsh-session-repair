@@ -4,6 +4,8 @@
 
 A DSH Web plugin for session diagnosis, trusted checkpoints, pre-repair backups, and safe repair.
 
+<img src="assets/session-health-check.png" width="640" alt="Session Health Check" />
+
 ## Installation
 
 ### From npm (recommended)
@@ -35,6 +37,20 @@ The `severity` of a diagnostic report is derived from its checks and decides whe
 | `warning` | A settled (non-live) history contains unclosed turn/step structures or other potential issues. Readable; no writable repair is offered. |
 | `repairable` | Deterministically fixable issues exist (e.g. empty tool-call ID chains); a repair plan can be submitted. |
 | `blocked` | The session cannot be displayed normally and has a hard conflict that cannot be auto-fixed (ID conflict, zstd damage, session mismatch). |
+
+## Why this plugin
+
+If a session refuses to load after the DeepSeek gateway emitted an empty `id`/`name` on a tool-call delta (the "identity-loss" family tracked upstream in [discussion #4365](https://github.com/deepseek-ai/deepseek-harness/discussions/4365)), the persisted history is poisoned — every later load throws `message must have tool source`.
+
+dsh-session-repair fixes that poisoned history **in place, from the broken session's own header** — no manual sessionId copying, no agent involvement, no hand-splitting zstd frames:
+
+- One click: **Session Health Check → Backup & Repair** on the unopenable session.
+- Covers all three identity-loss shapes: missing, `null`, and `""`.
+- Repairs the full chain (`assistant/message`, `tool/call`, `tool/result`) in one batch.
+- Always writes a pre-repair backup first, with one-click rollback and an audit trail.
+
+
+Upstream verified the root cause and adopted our close-block fallback as a new layer of the engine-side fix blueprint (discussion #4365). This plugin remains the load-path recovery complement: it restores already-poisoned history, while the engine patch prevents new poison from being written.
 
 ## Usage
 
