@@ -11,7 +11,20 @@
 ### 变更
 - Client bundle 内置 `I18N = { zh, en }` 文案表，JSX 不再散落中文字符串字面量。
 
-遵循 Keep a Changelog，版本号遵循 SemVer。
+### Added (en)
+- i18n: all GUI user-facing copy is now zh/en bilingual, following the DSH Web UI language (navigator.language / document.documentElement.lang), zero configuration.
+- Bilingual README: `README.md` (English, shown by default on npm/GitHub) + `README.zh.md` (Chinese), cross-linked at the top.
+
+### Changed (en)
+- Client bundle ships an `I18N = { zh, en }` dictionary; JSX no longer contains scattered Chinese string literals.
+
+## [0.6.1] - 2026-08-24
+
+### Changed
+- `package.json#description` switched to English to match the English README on the npm page.
+
+### Changed (en)
+- `package.json#description` is now English for consistency with the English README.
 
 ## [0.5.3] - 2026-08-22
 
