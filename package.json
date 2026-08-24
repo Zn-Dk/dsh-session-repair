@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-repair",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "DSH Web plugin for session diagnosis, trusted checkpoints, pre-repair backups, and safe repair.",
   "type": "module",
   "main": "lib/index.js",

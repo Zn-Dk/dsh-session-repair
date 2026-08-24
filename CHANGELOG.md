@@ -18,6 +18,22 @@
 ### Changed (en)
 - Client bundle ships an `I18N = { zh, en }` dictionary; JSX no longer contains scattered Chinese string literals.
 
+## [0.6.2] - 2026-08-24
+
+### 修复
+- i18n 未跟随宿主语言：改用 Host locale 服务（`ctx.get('locale')` 读 `locale.preference`），并通过 `useSyncExternalStore` 订阅切换实时重渲染；不再依赖 `navigator.language`（用户切 English 后仍显示中文的问题）。
+
+### 变更
+- Client bundle 通过 `locale.register('dsh-session-repair', { zh, en })` 注册文案，`t()` 优先走宿主翻译管道。
+- humanDiff 标点与 seq 列表分隔符也 i18n 化（`joinEnd`/`sentenceEnd`/`seqSep`）。
+
+### Fixed (en)
+- i18n now follows the Host locale service (`ctx.get('locale')` reads `locale.preference`) with `useSyncExternalStore` reactive re-render; no longer relies on `navigator.language` (which stayed zh after switching the UI to English).
+
+### Changed (en)
+- Client bundle registers copy via `locale.register('dsh-session-repair', { zh, en })`; `t()` prefers the Host translation pipeline.
+- humanDiff punctuation and seq-list separators are i18n keys (`joinEnd`/`sentenceEnd`/`seqSep`).
+
 ## [0.6.1] - 2026-08-24
 
 ### Changed
