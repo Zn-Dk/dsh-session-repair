@@ -2,6 +2,17 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.6.0] - 2026-08-24
+
+### 新增
+- i18n：GUI 全部用户可见文案中英双语，语言跟随 DSH Web UI（navigator.language / document.documentElement.lang），零配置。
+- README 双语：`README.md`（英文，npm/GitHub 默认展示）+ `README.zh.md`（中文），顶部互链。
+
+### 变更
+- Client bundle 内置 `I18N = { zh, en }` 文案表，JSX 不再散落中文字符串字面量。
+
+遵循 Keep a Changelog，版本号遵循 SemVer。
+
 ## [0.5.3] - 2026-08-22
 
 ### 文档

@@ -1,82 +1,84 @@
 # dsh-session-repair
 
-DSH Web 会话诊断、可信 checkpoint、pre-repair backup 与安全修复插件。
+> **English** | [中文](./README.zh.md)
 
-## 安装
+A DSH Web plugin for session diagnosis, trusted checkpoints, pre-repair backups, and safe repair.
 
-### 从 npm 安装（推荐）
+## Installation
+
+### From npm (recommended)
 
     dsh plugin --profile web add dsh-session-repair
 
-安装后重启 `dsh web`，再刷新 http://127.0.0.1:3080。
+Restart `dsh web` after installation, then refresh http://127.0.0.1:3080.
 
-### 从 GitHub 安装
+### From GitHub
 
     dsh plugin --profile web add github:Zn-Dk/dsh-session-repair
 
-### 开发阶段：link 本地源码
+### Development: link local source
 
     cd /root/proj/dsh-proj/dsh-session-repair
     pnpm install
     pnpm build
     dsh plugin --profile web add link:/root/proj/dsh-proj/dsh-session-repair
 
-修改源码后重启现有 dsh web；不要启动替代服务器。若同时运行 deepseek-harness 的 dev:web watcher，Client bundle 可通过现有 HMR 接收更新。
+After modifying the source, restart the existing `dsh web` process; do not start a replacement server. If the deepseek-harness `dev:web` watcher is running, the Client bundle can receive updates through the existing HMR.
 
-## 状态分级
+## Severity levels
 
-诊断报告的 `severity` 由检查项汇总而来，用于决定是否显示可写修复入口：
+The `severity` of a diagnostic report is derived from its checks and decides whether writable repair entry points are shown:
 
 | status | case-when |
 | --- | --- |
-| `healthy` | 无 blocked/repairable/warning 检查项。`seq-gap` 与 live 会话中未闭合的 turn/step 仅作 info 观察项，不抬高等级。 |
-| `warning` | 已结束（非 live）的历史存在未闭合的 turn/step 结构，或有其他潜在问题。可读、不提供写入修复。 |
-| `repairable` | 存在确定性可修复问题（如空 tool-call ID 链），可提交修复计划。 |
-| `blocked` | 会话无法正常展示，且存在无法自动修复的硬冲突（如 ID 冲突、zstd 损坏、会话不匹配）。 |
+| `healthy` | No blocked/repairable/warning checks. `seq-gap` and unclosed turn/step in a live session are informational only and do not raise the level. |
+| `warning` | A settled (non-live) history contains unclosed turn/step structures or other potential issues. Readable; no writable repair is offered. |
+| `repairable` | Deterministically fixable issues exist (e.g. empty tool-call ID chains); a repair plan can be submitted. |
+| `blocked` | The session cannot be displayed normally and has a hard conflict that cannot be auto-fixed (ID conflict, zstd damage, session mismatch). |
 
-## 使用
+## Usage
 
-打开任意会话，在 Chat header 点击「会话体检」。当报告为 repairable 且至少有一条确定性修复计划时，面板会显示「备份并修复」按钮，并列出全部待修 seq 链。点击后先确认目标 seq 和 pre-repair backup，再一次性执行修复并重新校验；歧义、live、文件变化或其他 blocked 状态不会显示可写修复按钮。
+Open any session and click **Session Health Check** in the Chat header. When the report is `repairable` and has at least one deterministic repair plan, the panel shows a **Backup & Repair** button and lists every seq chain to fix. Clicking it first confirms the target seqs and the pre-repair backup, then applies the repair in one batch and revalidates; ambiguous, live, changed-artifact, or otherwise blocked states never show a writable repair button.
 
-面板按钮说明：
+Panel buttons:
 
-- 「刷新诊断」：重新读取当前会话工件并更新报告。
-- 「复制报告」：把诊断 JSON 复制到剪贴板。
-- 「导出报告」：下载诊断报告 JSON 文件。
-- 「恢复上次修复前」：仅当会话为 repairable/blocked 且存在 pre-repair 备份时显示，一键回滚到最近一次修复前的状态。
-- 「清空备份」：手动清空 safety 备份。
-- 「备份并修复」：仅当报告为 `repairable` 且存在确定性修复计划时显示。
+- **Refresh**: re-reads the current session artifact and updates the report.
+- **Copy Report**: copies the diagnostic JSON to the clipboard.
+- **Export Report**: downloads the diagnostic report as a JSON file.
+- **Restore Pre-Repair**: shown only when the session is `repairable`/`blocked` and a pre-repair backup exists; one-click rollback to the state before the most recent repair.
+- **Clear Backups**: manually clears safety backups.
+- **Backup & Repair**: shown only when the report is `repairable` and a deterministic repair plan exists.
 
-### Agent 工具（模型调用）
+### Agent tool (model-invoked)
 
-插件注册了一个**模型可调用工具** `dsh_session_repair`，它不是用户手动触发，而是由 agent 判断并调用：
+The plugin registers a **model-invokable tool** `dsh_session_repair`. It is not user-triggered manually; the agent decides when to call it:
 
-- 参数：`sessionId`（可选；缺省时诊断当前会话）
-- 返回：结构化诊断报告（severity / checks / repairPlans / maxSeq / eventCount 等）
+- Arguments: `sessionId` (optional; defaults to the current session)
+- Returns: a structured diagnostic report (severity / checks / repairPlans / maxSeq / eventCount, etc.)
 
-典型用法：
+Typical usage:
 
-1. 在**健康会话**里对 agent 说：「诊断 session-xxxx 这个 history unavailable 会话」，agent 会调用 `dsh_session_repair` 并传入旧 sessionId。
-2. 在当前会话里对 agent 说：「帮我体检一下当前会话」，agent 调用时不传 sessionId，诊断当前会话。
+1. In a **healthy session**, tell the agent: "diagnose the history-unavailable session session-xxxx" — the agent calls `dsh_session_repair` with the old sessionId.
+2. In the current session, tell the agent: "health-check the current session" — the agent calls it without sessionId.
 
-注意：该工具只做**只读诊断**，不会执行修复。修复仍需在 header 的「会话体检」面板里点按钮完成。
+Note: this tool is **read-only diagnosis**; it never repairs. Repair still requires the **Session Health Check** panel in the header.
 
-## 安全边界
+## Safety boundary
 
-Host 先读取 raw storage，再决定是否调用引擎展示接口。Client 不直接触碰 ~/.dsh，也不能提交任意 JSON patch。修复使用 batchId 与 artifact fingerprint，修复前必生成 pre-repair backup，复验成功后才原子替换。多条独立空 ID 链在一次性批次中修复；歧义、zstd 损坏、文件变化、live/追加中的会话一律不写入。live 会话通过 `ctx.get('sessions')` / `ctx.get('agents')` 判定，其未闭合的 turn/step 属正常追加状态，仅记为 info。
+The Host reads raw storage first, then decides whether to call engine display APIs. The Client never touches `~/.dsh` directly and cannot submit arbitrary JSON patches. Repair uses a batchId and an artifact fingerprint, always creates a pre-repair backup before repairing, and atomically replaces only after revalidation. Multiple independent empty-ID chains are fixed in one batch; ambiguous chains, zstd damage, changed files, and live/appending sessions are never written. Live sessions are detected via `ctx.get('sessions')` / `ctx.get('agents')`; their unclosed turn/step are normal appending states and are only recorded as info.
 
-插件自有数据位于 ~/.dsh/session-repair/，包括 backups 和 audit。外部 ~/.dsh/backup-sessions-* 目录只作为 legacy 取证与比较来源，默认不自动恢复。
+Plugin-owned data lives under `~/.dsh/session-repair/`, including backups and audit. External `~/.dsh/backup-sessions-*` directories are used only as legacy forensics/comparison sources and are not auto-restored by default.
 
-## 当前实现状态
+## Current implementation status
 
-当前仓库已包含 raw zstd/JSONL 诊断、tool-call ID 检查、确定性 repair plan、checkpoint/pre-repair backup 写入、backup 列表/对比、报告导出、RPC、Agent tool、header 报告面板和随包 Skill。全部端点为已实现或明确返回 not-implemented，不会伪装成功。
+The repository includes raw zstd/JSONL diagnosis, tool-call ID checks, deterministic repair plans, checkpoint/pre-repair backup writes, backup listing/comparison, report export, RPC, the Agent tool, a header report panel, and a bundled Skill. All endpoints are implemented or explicitly return not-implemented; nothing pretends to succeed.
 
-## 发布与收录
+## Release & listing
 
-- npm：[dsh-session-repair](https://www.npmjs.com/package/dsh-session-repair)
-- GitHub：https://github.com/Zn-Dk/dsh-session-repair
-- 收录：提交 PR 至 https://github.com/awesome-dsh-plugin/awesome-dsh-plugin（`data/plugins/Zn-Dk__dsh-session-repair.yml`，category: `session`）
+- npm: [dsh-session-repair](https://www.npmjs.com/package/dsh-session-repair)
+- GitHub: https://github.com/Zn-Dk/dsh-session-repair
+- Listing: PR submitted to https://github.com/awesome-dsh-plugin/awesome-dsh-plugin (`data/plugins/Zn-Dk__dsh-session-repair.yml`, category: `session`)
 
 ## Skill
 
-随包 Skill 发布在 `skills/dsh-session-repair/SKILL.md`，由 Host runtime 注册；与插件同名但属于不同注册表，不单独发布、不使用 submodule、不默认软链接。
+The bundled Skill is published at `skills/dsh-session-repair/SKILL.md` and registered by the Host runtime; it shares the plugin name but belongs to a different registry. It is not published separately, does not use a submodule, and is not symlinked by default.
