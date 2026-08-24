@@ -28,3 +28,43 @@ test('applies multiple deterministic empty-id chains in one batch',()=>{
     assert.equal(fixed.events.find(e=>e.seq===plan.resultSeq).data.message.source.callId,id)
   }
 })
+
+test('identity-loss matrix: missing, null, and empty-string ids all plan and repair', () => {
+  const shapes = ['missing', 'null', 'empty-string']
+  const events = []
+  shapes.forEach((shape, i) => {
+    const turn = 10 + i
+    const seqA = 100 + i * 10 + 1
+    const seqC = 100 + i * 10 + 2
+    const seqR = 100 + i * 10 + 3
+    const idFor = (shape) => shape === 'missing' ? undefined : shape === 'null' ? null : ''
+    const id = idFor(shape)
+    const assistantBlock = { type: 'tool-call', name: 'run_code' }
+    if (id !== undefined) assistantBlock.id = id
+    const call = { type: 'tool/call', seq: seqC, data: { turn, step: 1, name: 'run_code' } }
+    if (id !== undefined) call.data.callId = id
+    const result = {
+      type: 'tool/result', seq: seqR,
+      data: { turn, step: 1, sourceEventSeqs: [seqC], message: { source: { kind: 'tool' }, content: [{ type: 'tool-result' }] } },
+    }
+    if (id !== undefined) result.data.message.source.callId = id
+    if (id !== undefined) result.data.message.content[0].toolCallId = id
+    events.push(
+      { type: 'assistant/message', seq: seqA, data: { turn, step: 1, message: { content: [assistantBlock] } } },
+      call,
+      result,
+    )
+  })
+  const plans = findEmptyToolChains(events)
+  assert.equal(plans.length, 3, 'all three loss shapes must be detected')
+  const fixed = applyEmptyToolChains(events, plans)
+  assert.equal(fixed.callIds.size, 3)
+  for (const plan of plans) {
+    const id = fixed.callIds.get(plan.repairId)
+    assert.match(id, /^call_repair_/)
+    assert.equal(fixed.events.find(e => e.seq === plan.assistantSeq).data.message.content[0].id, id)
+    assert.equal(fixed.events.find(e => e.seq === plan.callSeq).data.callId, id)
+    assert.equal(fixed.events.find(e => e.seq === plan.resultSeq).data.message.source.callId, id)
+    assert.equal(fixed.events.find(e => e.seq === plan.resultSeq).data.message.content[0].toolCallId, id)
+  }
+})
