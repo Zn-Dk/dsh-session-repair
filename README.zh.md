@@ -79,7 +79,8 @@ Host 先读取 raw storage，再决定是否调用引擎展示接口。Client �
 
 - npm：[dsh-session-repair](https://www.npmjs.com/package/dsh-session-repair)
 - GitHub：https://github.com/Zn-Dk/dsh-session-repair
-- 收录：提交 PR 至 https://github.com/awesome-dsh-plugin/awesome-dsh-plugin（`data/plugins/Zn-Dk__dsh-session-repair.yml`，category: `session`）
+- Releases：https://github.com/Zn-Dk/dsh-session-repair/releases
+- 收录：**已被 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 与 [awesome-deepseek-harness](https://github.com/0xsline/awesome-deepseek-harness) 收录**（awesome 侧 category: `session`；见 `data/plugins/Zn-Dk__dsh-session-repair.yml`）
 
 ## Skill
 

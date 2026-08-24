@@ -77,7 +77,8 @@ The repository includes raw zstd/JSONL diagnosis, tool-call ID checks, determini
 
 - npm: [dsh-session-repair](https://www.npmjs.com/package/dsh-session-repair)
 - GitHub: https://github.com/Zn-Dk/dsh-session-repair
-- Listing: PR submitted to https://github.com/awesome-dsh-plugin/awesome-dsh-plugin (`data/plugins/Zn-Dk__dsh-session-repair.yml`, category: `session`)
+- Releases: https://github.com/Zn-Dk/dsh-session-repair/releases
+- Listing: **listed in [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)** (category: `session`; see `data/plugins/Zn-Dk__dsh-session-repair.yml`) and [awesome-deepseek-harness](https://github.com/0xsline/awesome-deepseek-harness)
 
 ## Skill
 
