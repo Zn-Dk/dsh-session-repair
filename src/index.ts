@@ -245,7 +245,12 @@ export function createHandler(ctx: Ctx) { return async (endpoint: string, payloa
 export function apply(ctx: Ctx) {
   const handler = createHandler(ctx)
   let disposeRpc: unknown = () => {}
-  ctx.inject(['connection'], web => { if (!web.connection) return; const d = (web.connection as { rpc: { handle: (ch: string, h: unknown, opts: { authority: string }) => unknown } }).rpc.handle(CHANNEL, handler, { authority: 'loopback' }); if (typeof d === 'function') disposeRpc = d })
+  // The third options argument is historical: on DSH <= 0.1.1 it narrowed the trust
+  // fence to loopback-only (trustedHosts = []); omitting it would widen, not narrow.
+  // DSH 0.1.2 removed the parameter (loopback trust is handled by the Connection
+  // service via its trustedHosts config), so it is ignored there. Keep passing it so
+  // older engines stay on the stricter fence instead of falling back to deployment hosts.
+  ctx.inject(['connection'], web => { if (!web.connection) return; const d = (web.connection as { rpc: { handle: (ch: string, h: unknown, opts?: { authority: string }) => unknown } }).rpc.handle(CHANNEL, handler, { authority: 'loopback' }); if (typeof d === 'function') disposeRpc = d })
   const skillPath = join(import.meta.dirname ?? new URL('.', import.meta.url).pathname, '..', 'skills', 'dsh-session-repair', 'SKILL.md')
   let disposeSkill = () => {}
   const skills = ctx.get('skills') as { register?: (opts: Record<string, unknown>) => () => void } | undefined
