@@ -36,7 +36,31 @@ export declare const DIAGNOSTIC: Readonly<{
     PROJECTION_MISMATCH: "projection-mismatch";
     WORKSPACE_REFERENCE_MISMATCH: "workspace-reference-mismatch";
     LEGACY_BACKUP: "legacy-backup";
+    FORMAT_VERSION_UNSUPPORTED: "format-version-unsupported";
+    SOURCE_KIND_UNCLASSIFIED: "source-kind-unclassified";
+    SOURCE_FIELD_UNEXPECTED: "source-field-unexpected";
+    USAGE_NULL_TOKEN: "usage-null-token";
 }>;
+/**
+ * The installed engine's session format version. A stored header naming any
+ * other version is either an older generation (migratable) or a corrupt value.
+ */
+export declare const SESSION_FORMAT_VERSION = 3;
+/** Audited `message.source.kind` vocabulary (engine `SOURCE_KINDS`). */
+export declare const SOURCE_KINDS: ReadonlySet<string>;
+/**
+ * Event types whose payloads carry an owned `message` with a `source` that the
+ * engine's admission walk validates (engine `assertEvent`, and
+ * `assertSource` for the spliced/title request carriers).
+ */
+export declare const MESSAGE_BEARING_TYPES: ReadonlySet<string>;
+/**
+ * The one source kind whose fields are a closed set. The engine validates
+ * `source` field names only on this branch; every other kind is admitted with
+ * whatever fields its writer added, so this plugin must not guess a wider
+ * vocabulary (doing so reported lawful `form`/`provider` keys as defects).
+ */
+export declare const AGENT_MESSAGE_SOURCE_KEYS: readonly string[];
 export declare function ok<T>(value: T): Result<T>;
 export declare function err(code: string, message: string, details?: Record<string, unknown>): Result<never>;
 export declare function badRequest(message: string): Result<never>;

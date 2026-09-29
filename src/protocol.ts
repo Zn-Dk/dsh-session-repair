@@ -24,7 +24,44 @@ export const DIAGNOSTIC = Object.freeze({
   TOOL_CALL_UNPAIRED: 'tool-call-unpaired', TOOL_CALL_ID_REUSED: 'tool-call-id-reused',
   PROJECTION_MISMATCH: 'projection-mismatch', WORKSPACE_REFERENCE_MISMATCH: 'workspace-reference-mismatch',
   LEGACY_BACKUP: 'legacy-backup',
+  // V3 format-admission diagnostics (DSH >= 0.1.5-rc.1). These mirror the
+  // audited rules the installed engine applies when it loads a Session, so a
+  // stored artifact this plugin calls healthy is one the engine accepts.
+  FORMAT_VERSION_UNSUPPORTED: 'format-version-unsupported',
+  SOURCE_KIND_UNCLASSIFIED: 'source-kind-unclassified',
+  SOURCE_FIELD_UNEXPECTED: 'source-field-unexpected',
+  USAGE_NULL_TOKEN: 'usage-null-token',
 })
+
+/**
+ * The installed engine's session format version. A stored header naming any
+ * other version is either an older generation (migratable) or a corrupt value.
+ */
+export const SESSION_FORMAT_VERSION = 3
+
+/** Audited `message.source.kind` vocabulary (engine `SOURCE_KINDS`). */
+export const SOURCE_KINDS: ReadonlySet<string> = new Set([
+  'user', 'plugin', 'model', 'tool', 'agent-instructions', 'session-reference',
+  'team-message', 'goal', 'skill-invocation', 'skill-catalog', 'coordinator',
+  'subagent-report', 'subagent-settled', 'webhook', 'agent-message',
+])
+
+/**
+ * Event types whose payloads carry an owned `message` with a `source` that the
+ * engine's admission walk validates (engine `assertEvent`, and
+ * `assertSource` for the spliced/title request carriers).
+ */
+export const MESSAGE_BEARING_TYPES: ReadonlySet<string> = new Set([
+  'user/message', 'assistant/message', 'tool/result', 'system/message',
+])
+
+/**
+ * The one source kind whose fields are a closed set. The engine validates
+ * `source` field names only on this branch; every other kind is admitted with
+ * whatever fields its writer added, so this plugin must not guess a wider
+ * vocabulary (doing so reported lawful `form`/`provider` keys as defects).
+ */
+export const AGENT_MESSAGE_SOURCE_KEYS: readonly string[] = ['kind', 'form', 'senderSessionId']
 
 export function ok<T>(value: T): Result<T> { return { ok: true, value } }
 export function err(code: string, message: string, details: Record<string, unknown> = {}): Result<never> { return { ok: false, error: { code, message, details } } }

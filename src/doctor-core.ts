@@ -1,4 +1,7 @@
-import { DIAGNOSTIC, severityFor, type DiagnosticCheck, type CheckSeverity, type Severity } from './protocol.js'
+import {
+  AGENT_MESSAGE_SOURCE_KEYS, DIAGNOSTIC, MESSAGE_BEARING_TYPES, SOURCE_KINDS,
+  severityFor, type DiagnosticCheck, type CheckSeverity, type Severity,
+} from './protocol.js'
 
 export interface ValidateOptions { live?: boolean }
 export interface ValidationReport {
@@ -62,6 +65,88 @@ function structuralChecks(events: SessionEvent[], options: ValidateOptions = {})
   return checks
 }
 
+/**
+ * Format-admission checks mirroring the installed engine's V3 rules.
+ *
+ * The engine refuses a stored Session whose `message.source.kind` is outside the
+ * audited vocabulary, whose `agent-message` source carries a field that closed
+ * branch does not admit, or whose `usage` reports a token count that is not a
+ * non-negative safe integer. Those rules live in the migration/validation
+ * packages; this mirrors the observable outcomes so a report from this plugin
+ * matches what the engine will decide.
+ *
+ * Deliberately narrow: the engine validates source FIELD names only for the
+ * `agent-message` kind, so no wider key vocabulary is asserted here. An earlier
+ * revision guessed one and reported lawful `form`/`provider` keys as defects.
+ * @param events - decoded Session events, header first.
+ * @returns one check per violated rule.
+ */
+function formatChecks(events: SessionEvent[]): DiagnosticCheck[] {
+  const checks: DiagnosticCheck[] = []
+  for (const event of events) {
+    if (typeof event.type !== 'string' || !MESSAGE_BEARING_TYPES.has(event.type)) continue
+    const message = event.type === 'user/message' ? (event as { data?: Record<string, unknown> }).data : eventMessage(event)
+    const source = (message as { source?: Record<string, unknown> } | undefined)?.source
+    if (source === undefined || source === null || typeof source !== 'object') continue
+    const kind = source['kind']
+    if (typeof kind !== 'string' || !SOURCE_KINDS.has(kind)) {
+      checks.push(check(
+        DIAGNOSTIC.SOURCE_KIND_UNCLASSIFIED,
+        'blocked',
+        'message source kind is outside the audited vocabulary',
+        [event.seq ?? 0],
+        { eventType: event.type, kind: typeof kind === 'string' ? kind : null },
+      ))
+      // A kind the vocabulary does not know cannot be checked further.
+      continue
+    }
+    if (kind === 'agent-message') {
+      const unexpected = Object.keys(source).filter(key => !AGENT_MESSAGE_SOURCE_KEYS.includes(key))
+      if (unexpected.length > 0) {
+        checks.push(check(
+          DIAGNOSTIC.SOURCE_FIELD_UNEXPECTED,
+          'repairable',
+          'agent-message source carries a field its closed shape does not admit',
+          [event.seq ?? 0],
+          { eventType: event.type, fields: unexpected },
+        ))
+      }
+    }
+  }
+  checks.push(...usageChecks(events))
+  return checks
+}
+
+/** Reject token counts that are not non-negative safe integers (engine rule). */
+function usageChecks(events: SessionEvent[]): DiagnosticCheck[] {  const checks: DiagnosticCheck[] = []
+  for (const event of events) {
+    const usage = (event.data as { usage?: unknown } | undefined)?.usage
+    if (usage === undefined || usage === null || typeof usage !== 'object') continue
+    for (const [key, value] of Object.entries(usage as Record<string, unknown>)) {
+      if (value === null) {
+        checks.push(check(
+          DIAGNOSTIC.USAGE_NULL_TOKEN,
+          'repairable',
+          'usage reports a null token count',
+          [event.seq ?? 0],
+          { field: key },
+        ))
+        continue
+      }
+      if (typeof value === 'number' && (!Number.isSafeInteger(value) || value < 0)) {
+        checks.push(check(
+          DIAGNOSTIC.USAGE_NULL_TOKEN,
+          'blocked',
+          'usage reports a token count that is not a non-negative safe integer',
+          [event.seq ?? 0],
+          { field: key, value },
+        ))
+      }
+    }
+  }
+  return checks
+}
+
 export function validateEvents(events: SessionEvent[], requestedSessionId: string, artifact: { stable?: boolean; fingerprint?: unknown } = {}, options: ValidateOptions = {}): ValidationReport {
   const checks: DiagnosticCheck[] = []
   const first = events[0]
@@ -72,9 +157,17 @@ export function validateEvents(events: SessionEvent[], requestedSessionId: strin
   const seqs = events.map(e => e.seq).filter((s): s is number => Number.isInteger(s))
   const seen = new Set<number>()
   for (const seq of seqs) { if (seen.has(seq)) checks.push(check(DIAGNOSTIC.SEQ_DUPLICATE, 'blocked', 'duplicate event sequence', [seq])); seen.add(seq) }
+  // Gaps are aggregated into ONE informational check: a Session whose events were
+  // trimmed (subagent inheritance, compaction) legitimately carries many jumps, and
+  // one check per jump buried every other finding under hundreds of identical rows.
+  let gapCount = 0
+  let firstGap: [number, number] | undefined
   for (let i = 1; i < seqs.length; i++) {
     if (seqs[i] <= seqs[i - 1]) checks.push(check('seq-not-increasing', 'blocked', 'event sequence is not increasing', [seqs[i - 1], seqs[i]]))
-    if (seqs[i] > seqs[i - 1] + 1) checks.push(check(DIAGNOSTIC.SEQ_GAP, 'info', 'event sequence has a gap', [seqs[i - 1], seqs[i]]))
+    if (seqs[i] > seqs[i - 1] + 1) { gapCount++; firstGap ??= [seqs[i - 1], seqs[i]] }
+  }
+  if (gapCount > 0 && firstGap !== undefined) {
+    checks.push(check(DIAGNOSTIC.SEQ_GAP, 'info', 'event sequence has gaps', firstGap, { gapCount }))
   }
   const calls = new Map<string, SessionEvent>(), results: Array<{ event: SessionEvent; id: string | undefined }> = []
   for (const event of events) {
@@ -97,6 +190,7 @@ export function validateEvents(events: SessionEvent[], requestedSessionId: strin
     }
   }
   for (const result of results) if (result.id && !calls.has(result.id)) checks.push(check(DIAGNOSTIC.TOOL_CALL_UNPAIRED, 'blocked', 'tool result has no matching call', [result.event.seq ?? 0], { id: result.id }))
+  for (const item of formatChecks(events)) checks.push(item)
   for (const item of structuralChecks(events, options)) checks.push(item)
   const deduped: DiagnosticCheck[] = []
   const keys = new Set<string>()

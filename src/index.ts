@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CHANNEL, badRequest, err, ok, toError, validId, type Result } from './protocol.js'
@@ -30,10 +30,27 @@ interface RepairBatch {
   plans: RepairPlan[]
   expiresAt: number
 }
-interface SessionPersistence {
-  list: () => Promise<Array<{ id: unknown }>>
-  locate: (header: { id: unknown }) => { path?: string } | undefined
+/**
+ * The stored-Session observation this plugin needs, across both contracts:
+ * - DSH >= 0.1.5-rc.1: `list()` yields `{ header, revision, ... }` snapshots and
+ *   the backend exposes no path at all (the legacy `locate` surface was
+ *   removed), so the artifact path is recomputed from the header below.
+ * - DSH <= 0.1.2: `list()` yielded flat headers and `locate(header)` returned
+ *   `{ path }`.
+ * Both shapes are read defensively; `locate` is optional and never assumed.
+ */
+interface SessionSnapshotLike {
+  header?: { id?: unknown; cwd?: unknown; version?: unknown }
+  id?: unknown
+  cwd?: unknown
+  version?: unknown
 }
+interface SessionPersistence {
+  list: () => Promise<readonly SessionSnapshotLike[]>
+  locate?: (header: { id: unknown }) => { path?: string } | undefined
+}
+/** Header fields the path recomputation needs, after either shape is normalized. */
+interface StoredSessionRef { id: string; cwd?: string }
 interface SessionEventsLike { seq?: number }
 
 function pruneRepairs() {
@@ -42,6 +59,118 @@ function pruneRepairs() {
 }
 
 function persistenceOf(ctx: Ctx): SessionPersistence | undefined { return ctx.get('sessionPersistence') as SessionPersistence | undefined }
+
+/**
+ * The JSONL backend's session root. The backend itself takes this as
+ * configuration and never exposes it, so the plugin resolves the same default
+ * the shipped Web composition uses: `$DSH_HOME/sessions`.
+ */
+function sessionsRoot(): string {
+  const home = process.env['DSH_HOME'] ?? join(homedir(), '.dsh')
+  return join(home, 'sessions')
+}
+
+/**
+ * One path segment, encoded exactly as the JSONL backend's `encodeSegment`
+ * does: safe ASCII passes through, `'.'`/`'..'` and every other character
+ * become `~<4 uppercase hex>`.
+ */
+function encodeSegment(raw: string): string {
+  if (raw.length === 0) throw new Error('cannot encode an empty path segment')
+  if (raw === '.') return '~002E'
+  if (raw === '..') return '~002E~002E'
+  let out = ''
+  for (let i = 0; i < raw.length; i++) {
+    const code = raw.charCodeAt(i)
+    const ch = String.fromCharCode(code)
+    out += ch !== '~' && /^[A-Za-z0-9._-]$/.test(ch)
+      ? ch
+      : '~' + code.toString(16).toUpperCase().padStart(4, '0')
+  }
+  return out
+}
+
+/**
+ * The project directory name for one cwd, matching the backend's `projectKey`:
+ * separator runs collapse to a single `-`, unsafe characters become `~<hex>`,
+ * and the slug is wrapped as `--<slug>--` (empty slug becomes `root`).
+ */
+function projectKey(cwd: string): string {
+  if (cwd.length === 0) throw new Error('cannot encode an empty project path')
+  let readable = ''
+  let separatorRun = false
+  for (let i = 0; i < cwd.length; i++) {
+    const code = cwd.charCodeAt(i)
+    const ch = String.fromCharCode(code)
+    if (ch === '/' || ch === '\\' || ch === ':') {
+      if (!separatorRun) readable += '-'
+      separatorRun = true
+    } else if (ch !== '~' && /^[A-Za-z0-9._-]$/.test(ch)) {
+      readable += ch
+      separatorRun = false
+    } else {
+      readable += '~' + code.toString(16).toUpperCase().padStart(4, '0')
+      separatorRun = false
+    }
+  }
+  const slug = readable.replace(/^-+/, '') || 'root'
+  return `--${slug.slice(0, 251)}--`
+}
+
+/** Normalize either snapshot shape into the fields path resolution needs. */
+function sessionRefOf(snapshot: SessionSnapshotLike): StoredSessionRef | undefined {
+  const nested = snapshot.header
+  const id = nested !== undefined ? nested.id : snapshot.id
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  const cwd = nested !== undefined ? nested.cwd : snapshot.cwd
+  return { id, cwd: typeof cwd === 'string' ? cwd : undefined }
+}
+
+/**
+ * Resolve one session's JSONL artifact path.
+ *
+ * Preference order:
+ * 1. the backend's own `locate` (DSH <= 0.1.2);
+ * 2. a path recomputed from the snapshot's `cwd` + `id` (DSH >= 0.1.5-rc.1);
+ * 3. an on-disk scan of the session root for the encoded id, which covers a
+ *    stored session whose header carries no `cwd` (backend files it under
+ *    `_no-cwd`, but a moved/imported root may differ).
+ * @param ctx - hosting context carrying the optional persistence service.
+ * @param sessionId - the requested session id.
+ * @returns the artifact path, or undefined when the session is not observable.
+ */
+async function locate(ctx: Ctx, sessionId: string): Promise<string | undefined> {
+  const p = persistenceOf(ctx)
+  const snapshots = p === undefined ? [] : await p.list()
+  const ref = snapshots.map(sessionRefOf).find(candidate => candidate?.id === sessionId)
+  // 1. Backend-provided location, when this DSH still exposes it.
+  if (p?.locate !== undefined) {
+    const direct = p.locate({ id: sessionId })
+    if (direct?.path !== undefined) return direct.path
+  }
+  if (ref === undefined) return undefined
+  // 2. Recompute from the snapshot (the rc.1 path).
+  const candidates = [
+    join(sessionsRoot(), projectKey(ref.cwd ?? ''), encodeSegment(ref.id), 'session.jsonl.zstd'),
+    join(sessionsRoot(), '_no-cwd', encodeSegment(ref.id), 'session.jsonl.zstd'),
+  ]
+  for (const candidate of candidates) {
+    if (await exists(candidate)) return candidate
+  }
+  // 3. Last resort: scan one level of project dirs for the encoded id.
+  try {
+    for (const entry of await readdir(sessionsRoot())) {
+      const candidate = join(sessionsRoot(), entry, encodeSegment(ref.id), 'session.jsonl.zstd')
+      if (await exists(candidate)) return candidate
+    }
+  } catch { /* an unreadable root stays unreported here; inspect() reports it */ }
+  return undefined
+}
+
+/** Existence probe that never throws for a missing path. */
+async function exists(path: string): Promise<boolean> {
+  try { await stat(path); return true } catch { return false }
+}
 function projectKeyOf(path: string) {
   const marker = '/sessions/'
   const index = path.indexOf(marker)
@@ -53,12 +182,6 @@ async function writeAudit(entry: Record<string, unknown>) {
   const path = join(root, 'audit', name)
   await writeFile(path, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600 })
   return path
-}
-async function locate(ctx: Ctx, sessionId: string): Promise<string | undefined> {
-  const p = persistenceOf(ctx); if (!p) return undefined
-  const headers = await p.list(); const header = headers.find(x => String(x.id) === sessionId)
-  if (!header) return undefined
-  const location = p.locate(header); return location?.path
 }
 async function inspectSession(ctx: Ctx, sessionId: string): Promise<Result<ValidationReport & { sessionId: string; path: string; repairPlans: RepairPlan[]; generatedAt: string; live: boolean; cleanedBackups: string[] }>> {
   if (!validId(sessionId)) return err('bad-request', 'sessionId must be a safe non-empty string')

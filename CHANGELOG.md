@@ -2,6 +2,37 @@
 
 遵循 Keep a Changelog，版本号遵循 SemVer。
 
+## [0.7.0] - 2026-09-25
+
+### 新增
+- **DSH 0.1.5-rc.1 会话格式（V3）检测能力**，三个新诊断码，规则对齐引擎的会话准入校验：
+  - `source-kind-unclassified`（blocked）：`message.source.kind` 不在引擎的 15 项审计词表内（例如 `plugin:dsh-mnemon` 这类插件私有写法）；
+  - `source-field-unexpected`（repairable）：`agent-message` 来源出现闭合形状之外的字段（引擎只对该分支校验字段名）；
+  - `usage-null-token`（null 为 repairable，负值/非安全整数为 blocked）：`usage` 里出现引擎拒绝的 token 计数。
+- **V3 修复动作** `findFormatRepairs` / `applyFormatRepair`：只做不臆造数据的机械修复（丢弃无信息的 `null` token 计数）。**未经分类的 `source.kind` 不自动改写**——挑选合法 kind 属于对插件意图的判断，交由人工或写入方决定。
+- 新增 14 个 V3 专项测试，其中包含「同一字段名出现在其他事件类型时不得被误改」的隔离断言。
+
+### 修复
+- **修复在 DSH ≥ 0.1.5-rc.1 上完全不可达**（严重）：插件依赖的 `sessionPersistence.locate()` 已被 rc.1 移除，且 rc.1 的 `list()` 返回 `{ header, revision, ... }` 嵌套快照而旧代码读 `x.id`，导致每次检查都返回 `artifact-missing`、所有修复路径不可达。现在：兼容两种快照形状；`locate` 变为可选调用；新增**路径重算**（复刻引擎 `projectKey` + `encodeSegment` 规则，含 `_no-cwd` 与目录扫描兜底），已在真实会话上验证可精确定位 artifact。
+- `seq-gap` 由「每个跳跃报一条」改为**聚合成一条汇总**（带 `gapCount`）。真实 subagent 会话常有上千次跳跃（事件被裁剪所致，完全正常），逐条上报会淹没其他发现。
+
+### 说明
+- 诊断码的严重级别与引擎实际行为对齐：`source.kind` 非法会被引擎拒绝加载，故为 blocked；`null` token 可机械修复，故为 repairable。
+- 曾考虑增加 `format-version-unsupported`，经真实数据核实**予以否决**：已存会话 header 的 `version` 是*物理代际*（真实文件为 `version: 0`），并非 V3 逻辑版本，据此判断会产生误报。
+
+### Added (en)
+- **DSH 0.1.5-rc.1 session-format (V3) detection**, three new diagnostic codes mirroring the engine's session admission rules: `source-kind-unclassified` (blocked), `source-field-unexpected` (repairable, `agent-message` closed shape only), and `usage-null-token` (repairable for `null`, blocked for negative/unsafe counts).
+- **V3 repair actions** `findFormatRepairs` / `applyFormatRepair` performing only mechanical, non-inventive fixes (dropping an information-free `null` token count). An unclassified `source.kind` is deliberately NOT auto-rewritten — choosing a lawful kind is a judgement about plugin intent.
+- 14 new V3-focused tests, including an isolation assertion that a same-named key on an unrelated event type is never rewritten.
+
+### Fixed (en)
+- **The plugin was entirely unreachable on DSH >= 0.1.5-rc.1**: its `sessionPersistence.locate()` dependency was removed in rc.1 and the rc.1 `list()` returns nested `{ header, revision, ... }` snapshots while the old code read `x.id`, so every inspection reported `artifact-missing`. Now: both snapshot shapes are read, `locate` is an optional call, and a new path recomputation (mirroring the engine's `projectKey` + `encodeSegment`, with `_no-cwd` and directory-scan fallbacks) resolves the artifact — verified against a real session.
+- `seq-gap` now aggregates into a single summarized check carrying `gapCount`, instead of one row per jump (real subagent sessions legitimately carry thousands of jumps and buried every other finding).
+
+### Notes (en)
+- Severities match engine behaviour: an illegal `source.kind` is refused at load (blocked); a `null` token count is mechanically fixable (repairable).
+- A `format-version-unsupported` check was considered and **rejected** after checking real data: a stored header's `version` is the *physical generation* (real files carry `version: 0`), not the V3 logical version, so asserting on it produces false positives.
+
 ## [0.6.0] - 2026-08-24
 
 ### 新增

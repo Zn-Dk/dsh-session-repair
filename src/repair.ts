@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { rename, writeFile } from 'node:fs/promises'
 import { zstdCompressSync } from 'node:zlib'
+import { SESSION_FORMAT_VERSION } from './protocol.js'
 import { decodeJsonl } from './raw-storage.js'
 
 export interface RepairPlan {
@@ -82,8 +83,107 @@ export function applyEmptyToolChains(events: SessionEvent[], plans: RepairPlan[]
   }
   return { events: out, callIds }
 }
-export function repairJsonlFrames(originalBytes: Buffer, events: SessionEvent[], changedSeqs: number[]): Buffer {
-  const decoded = decodeJsonl(originalBytes)
+/**
+ * One V3 format-admission repair, scoped to an exact event type.
+ *
+ * The event-type restriction is not incidental: an earlier revision of this
+ * plugin rewrote a field on every event type and corrupted 285 sessions whose
+ * unrelated events happened to carry the same key name. A plan therefore names
+ * one `eventType` and only that type's events are touched.
+ */
+export interface FormatRepairPlan {
+  repairId: string
+  /** The exact `event.type` this plan may modify. */
+  eventType: string
+  /** What is being fixed, for audit output. */
+  kind: 'format-version' | 'source-kind' | 'source-field' | 'usage-null'
+  /** Event seqs this plan changes. */
+  seqs: number[]
+  /** For source-field/usage repairs: the offending key. */
+  field?: string
+  /** For source-kind repairs: the replacement kind. */
+  replacement?: string
+  /** The observed offending value, for audit output only. */
+  observed?: unknown
+}
+
+/**
+ * Detect repairable V3 format defects as exact per-event plans.
+ *
+ * Only two transformations are mechanical enough to perform without inventing
+ * data:
+ * - a header naming a non-current version is restamped to the installed one;
+ * - a `null` usage token count is dropped, because the engine requires a
+ *   non-negative safe integer and `null` carries no count.
+ * Unclassified `source.kind` and unadmitted `source` fields are detected by the
+ * doctor but NOT planned here: choosing a lawful kind or deciding which field
+ * to sacrifice is a judgement about plugin intent, so it is left to a human or
+ * to the plugin that wrote the field.
+ * @param events - decoded Session events, header first.
+ * @returns ordered plans for the mechanical fixes only.
+ */
+export function findFormatRepairs(events: SessionEvent[]): FormatRepairPlan[] {
+  const plans: FormatRepairPlan[] = []
+  const header = events[0]
+  const headerVersion = (header?.data as { version?: unknown } | undefined)?.version
+  if (Number.isInteger(headerVersion) && headerVersion !== SESSION_FORMAT_VERSION) {
+    plans.push({
+      repairId: 'format-' + randomUUID(),
+      eventType: 'session',
+      kind: 'format-version',
+      seqs: [header?.seq ?? 0],
+      observed: headerVersion,
+    })
+  }
+  for (const event of events) {
+    const usage = (event.data as { usage?: Record<string, unknown> } | undefined)?.usage
+    if (usage === undefined || usage === null || typeof usage !== 'object') continue
+    const nullKeys = Object.entries(usage).filter(([, value]) => value === null).map(([key]) => key)
+    if (nullKeys.length === 0) continue
+    plans.push({
+      repairId: 'usage-' + randomUUID(),
+      eventType: String(event.type),
+      kind: 'usage-null',
+      seqs: [event.seq ?? 0],
+      field: nullKeys[0],
+      observed: nullKeys,
+    })
+  }
+  return plans
+}
+
+/**
+ * Apply one format plan. Only events matching the plan's exact `eventType` are
+ * touched, and only the named field is changed.
+ * @param events - decoded Session events.
+ * @param plan - the plan returned by {@link findFormatRepairs}.
+ * @returns the rewritten events and the seqs that actually changed.
+ */
+export function applyFormatRepair(events: SessionEvent[], plan: FormatRepairPlan): { events: SessionEvent[]; changedSeqs: number[] } {
+  const out = structuredClone(events)
+  const changed: number[] = []
+  for (const event of out) {
+    if (String(event.type) !== plan.eventType) continue
+    if (!plan.seqs.includes(event.seq ?? 0)) continue
+    if (plan.kind === 'format-version') {
+      const data = event.data as { version?: unknown } | undefined
+      if (data === undefined || data.version === SESSION_FORMAT_VERSION) continue
+      data.version = SESSION_FORMAT_VERSION
+      changed.push(event.seq ?? 0)
+      continue
+    }
+    if (plan.kind === 'usage-null') {
+      const usage = (event.data as { usage?: Record<string, unknown> } | undefined)?.usage
+      if (usage === undefined || plan.field === undefined) continue
+      if (usage[plan.field] !== null) continue
+      delete usage[plan.field]
+      changed.push(event.seq ?? 0)
+    }
+  }
+  return { events: out, changedSeqs: changed }
+}
+
+export function repairJsonlFrames(originalBytes: Buffer, events: SessionEvent[], changedSeqs: number[]): Buffer {  const decoded = decodeJsonl(originalBytes)
   const changed = new Set(changedSeqs)
   if (decoded.events.length !== events.length) throw new Error('event count changed during repair')
   const rebuilt: Buffer[] = []
