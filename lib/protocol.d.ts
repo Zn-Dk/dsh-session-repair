@@ -40,14 +40,27 @@ export declare const DIAGNOSTIC: Readonly<{
     SOURCE_KIND_UNCLASSIFIED: "source-kind-unclassified";
     SOURCE_FIELD_UNEXPECTED: "source-field-unexpected";
     USAGE_NULL_TOKEN: "usage-null-token";
+    EVENT_TYPE_UNKNOWN: "event-type-unknown";
 }>;
 /**
  * The installed engine's session format version. A stored header naming any
  * other version is either an older generation (migratable) or a corrupt value.
  */
-export declare const SESSION_FORMAT_VERSION = 3;
-/** Audited `message.source.kind` vocabulary (engine `SOURCE_KINDS`). */
+export declare const SESSION_FORMAT_VERSION = 4;
+/**
+ * The installed engine's event vocabulary (`KNOWN_SESSION_EVENT_TYPES`).
+ * A stored event whose type is outside this set is refused by the engine's
+ * read path unless its envelope carries `ignorable: true`.
+ */
+export declare const KNOWN_SESSION_EVENT_TYPES: ReadonlySet<string>;
+/**
+ * `message.source.kind` vocabulary enforced by the engine's V3→V4 migration
+ * (`assertSource`). It applies to HISTORICAL v3 artifacts only; a current v4
+ * artifact is admitted with any producer-owned kind.
+ */
 export declare const SOURCE_KINDS: ReadonlySet<string>;
+/** The source kind the v4 reader refuses outright: the retired plugin wrapper. */
+export declare const RETIRED_SOURCE_KIND = "plugin";
 /**
  * Event types whose payloads carry an owned `message` with a `source` that the
  * engine's admission walk validates (engine `assertEvent`, and

@@ -56,7 +56,7 @@ export interface FormatRepairPlan {
     /** The exact `event.type` this plan may modify. */
     eventType: string;
     /** What is being fixed, for audit output. */
-    kind: 'format-version' | 'source-kind' | 'source-field' | 'usage-null';
+    kind: 'format-version' | 'source-kind' | 'source-field' | 'usage-null' | 'mark-ignorable';
     /** Event seqs this plan changes. */
     seqs: number[];
     /** For source-field/usage repairs: the offending key. */
@@ -90,6 +90,17 @@ export declare function findFormatRepairs(events: SessionEvent[]): FormatRepairP
  * @returns the rewritten events and the seqs that actually changed.
  */
 export declare function applyFormatRepair(events: SessionEvent[], plan: FormatRepairPlan): {
+    events: SessionEvent[];
+    changedSeqs: number[];
+};
+/**
+ * Apply every format plan in order. Only events matching each plan's exact
+ * `eventType` are touched, and only the named field is changed.
+ * @param events - decoded Session events.
+ * @param plans - the plans returned by {@link findFormatRepairs}.
+ * @returns the rewritten events and the seqs that actually changed.
+ */
+export declare function applyFormatRepairs(events: SessionEvent[], plans: FormatRepairPlan[]): {
     events: SessionEvent[];
     changedSeqs: number[];
 };
